@@ -26,3 +26,14 @@ It is written for Linux only. For windows, see http://www.almico.com/speedfan.ph
 ---
 
 Note: You are required to have the Linux kernel with `thinkpad-acpi` patch. (Ubuntu, Solus and a few others already seem to have this)
+
+## New Features
+
+Compared to the original code, this fork adds 3 additional lines in the GUI (Highest, Average and Last setting) and adds 2 new (EXPERIMENTAL) controllers:
+
+1. A custom auto, that regulates the fans when they cross a threshold;
+2. [Recommended] A very simple implementation of a PID.
+
+However, **USE IT AT YOUR OWN RISK**.
+
+Under no circumstance shall I have any liability to you for any loss or damage of any kind incurred as a result of the use of this application!
