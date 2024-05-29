@@ -16,6 +16,15 @@ refresh_rate = 0.5
 
 last_setting = None
 
+def make_columns(x: list, total_width: int) -> list:
+    l = (len(x) + 1) // 2
+    new_list = []
+    for i in range(l):
+        item = x[i] + (total_width//2 - len(x[i]))*' ' + x[l + i]
+        item += (total_width - len(item))*' '
+        new_list.append(item)
+    return new_list
+
 def get_info() -> list[str]:
     info_lines = subprocess.check_output("sensors").decode("utf-8").split("\n")
     result : list[str] = []
@@ -28,11 +37,11 @@ def get_info() -> list[str]:
             temp_list.append(float(core.group(1)))
             count += 1
         if "fan" in i:
-            result.append("Fan : " + i.split(":")[-1].strip())
+            result.append("Fan: " + i.split(":")[-1].strip())
     
     global temperature_list
     temperature_list = temp_list
-
+    result = make_columns(result, 30)
     result.append(f'Highest: +{max(temp_list)}°C')
     result.append(f'Average: +{round(avg(temp_list), 1)}°C')
     return result
@@ -149,7 +158,7 @@ class MainApplication(tk.Frame):
         
         return set_speed(speed=MainApplication.speeds[self.current_speed])
 
-    def shitty_PID(self, target : float = 65, min_speed : int = 3, max_speed : int = 8, allow_full_speed : bool = False) -> str:
+    def shitty_PID(self, target : float = 65, min_speed : int = 2, max_speed : int = 6, allow_full_speed : bool = False) -> str:
         kP = 0.8
         kD = 0
         kI = 0.05
