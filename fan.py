@@ -2,7 +2,8 @@
 import tkinter as tk
 import subprocess
 from time import sleep, time
-from threading import Thread
+from threading import Thread, Lock
+import traceback
 
 import re
 
@@ -38,7 +39,7 @@ def get_info() -> list[str]:
             count += 1
         if "fan" in i:
             result.append("Fan: " + i.split(":")[-1].strip())
-    
+
     global temperature_list
     temperature_list = temp_list
     result = make_columns(result, 30)
@@ -71,18 +72,21 @@ def change_speed(speed : float, inc : float, min_speed : int, max_speed : int, a
     return int(new_speed)
 
 class MainApplication(tk.Frame):
-    
+
     speeds = {0 : '0', 1 : '1', 2 : '2', 3 : '3', 4 : '4', 5 : '5', 6 : '6', 7 : '7', 8 : 'full-speed'}
 
     def __init__(self, parent, *args, **kwargs):
-        
+
+        self.keep_running : bool = True
+        self.lock = Lock()
+
         self.policy = None
         self.allow_full_speed = False
 
         self.current_speed = 5
         self.last_time_above_max = time()
         self.last_time_below_max = time()
-        
+
         self.last_error = 0
         self.error_acc = 0
         self.PIDSignal = 5
@@ -118,13 +122,29 @@ class MainApplication(tk.Frame):
         )
 
         def display_loop():
-            while True:
+
+            while self.keep_running:
                 sleep(refresh_rate)
+
+                if not self.lock.acquire(blocking=False):
+                    print('Could not acquire lock. Canceling main application')
+                    break
+
                 if self.policy:
                     self.policy()
                 main_label["text"] = "\n".join(get_info()) + f'\nLast setting : {last_setting}\n Full : {"On" if self.allow_full_speed else "Off"}'
+                self.lock.release()
 
-        Thread(target=display_loop).start()
+        self.thread = Thread(target=display_loop)
+        self.thread.daemon = True
+        self.thread.start()
+
+    def stop(self) -> None:
+        self.keep_running = False
+        if self.lock.acquire(timeout=refresh_rate*1.1):
+            print('Thread successfully stopped!')
+        else:
+            print('Thread *forcefully* stopped!')
 
     def _clear_state(self) -> None:
         self.policy = None
@@ -135,17 +155,17 @@ class MainApplication(tk.Frame):
     def set_speed_button(self, speed : str) -> str:
         self._clear_state()
         return set_speed(speed)
-    
+
     def on_off_full(self) -> None:
         self.allow_full_speed = not self.allow_full_speed
-    
+
     def enable_sPID(self) -> None:
         self._clear_state()
         self.policy = self.shitty_PID
-    
+
     # deprecated
     def custom_auto(self, max_temp : float = 60, min_speed : int = 2, max_speed : int = 8, allow_full_speed : bool = False, delay_upwards : float = 3, delay_downwards : float = 5) -> str:
-        
+
         if avg(temperature_list) >= max_temp:
             self.last_time_above_max = time()
             if time() - self.last_time_below_max > delay_upwards:
@@ -156,19 +176,19 @@ class MainApplication(tk.Frame):
             if time() - self.last_time_above_max > delay_downwards:
                 self.current_speed = change_speed(self.current_speed, -1, min_speed, max_speed)
                 self.last_time_above_max = time()
-        
+
         return set_speed(speed=MainApplication.speeds[self.current_speed])
 
     def shitty_PID(self, target : float = 65, min_speed : int = 2, max_speed : int = 7) -> str:
         kP = 0.8
         kD = 0
         kI = 0.05
-        
+
         error = avg(temperature_list) - target
         error_deriv = (error - self.last_error)/refresh_rate
         self.error_acc += (error + self.last_error)*refresh_rate/2
         self.error_acc = min(max(0.0, self.error_acc), (max_speed / kI) * 1.25 )
-        
+
         self.PIDSignal = kP * error + kD * error_deriv + kI * self.error_acc
         self.PIDSignal = max(self.PIDSignal, float(min_speed))
 
@@ -176,15 +196,28 @@ class MainApplication(tk.Frame):
         self.current_speed = output_signal
 
         print(f'PIDSignal: {self.PIDSignal:.2f}, PK: {kP * error:.2f}, PI: {kI * self.error_acc:.2f}, error: {error:.2f}, error_deriv {error_deriv:.2f}, error_acc: {self.error_acc:.2f}')
-        
+
         return set_speed(speed=MainApplication.speeds[self.current_speed])
 
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Thinkfan Control")
-    MainApplication(root).grid()
-    try:
-        root.mainloop()
-    finally:
-        sleep(2)
+
+    app = MainApplication(root)
+    app.grid()
+
+    def on_closing():
+        root.destroy()
+        app.stop()
+        print('Closing: Speed set to "auto"')
         set_speed('auto')
+
+    try:
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+        root.mainloop()
+    except Exception:
+        print('An error occurred and the application will forcefully exit!')
+        on_closing()
+        print(traceback.format_exc())
+    finally:
+        print(f'Exiting {__file__}')
