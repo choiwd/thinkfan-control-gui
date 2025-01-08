@@ -77,6 +77,7 @@ class MainApplication(tk.Frame):
     def __init__(self, parent, *args, **kwargs):
         
         self.policy = None
+        self.allow_full_speed = False
 
         self.current_speed = 5
         self.last_time_above_max = time()
@@ -109,7 +110,7 @@ class MainApplication(tk.Frame):
         tk.Button(row2, text="Full", command=lambda: self.set_speed_button("full-speed")).grid(
             row=0, column=1
         )
-        tk.Button(row2, text="Custom auto", command=lambda: self.enable_custom_auto()).grid(
+        tk.Button(row2, text="On/off full", command=lambda: self.on_off_full()).grid(
             row=0, column=3
         )
         tk.Button(row2, text="Shitty PID", command=lambda: self.enable_sPID()).grid(
@@ -121,7 +122,7 @@ class MainApplication(tk.Frame):
                 sleep(refresh_rate)
                 if self.policy:
                     self.policy()
-                main_label["text"] = "\n".join(get_info()) + f'\nLast setting : {last_setting}'
+                main_label["text"] = "\n".join(get_info()) + f'\nLast setting : {last_setting}\n Full : {"On" if self.allow_full_speed else "Off"}'
 
         Thread(target=display_loop).start()
 
@@ -135,14 +136,14 @@ class MainApplication(tk.Frame):
         self._clear_state()
         return set_speed(speed)
     
-    def enable_custom_auto(self) -> None:
-        self._clear_state()
-        self.policy = self.custom_auto
+    def on_off_full(self) -> None:
+        self.allow_full_speed = not self.allow_full_speed
     
     def enable_sPID(self) -> None:
         self._clear_state()
         self.policy = self.shitty_PID
     
+    # deprecated
     def custom_auto(self, max_temp : float = 60, min_speed : int = 2, max_speed : int = 8, allow_full_speed : bool = False, delay_upwards : float = 3, delay_downwards : float = 5) -> str:
         
         if avg(temperature_list) >= max_temp:
@@ -158,7 +159,7 @@ class MainApplication(tk.Frame):
         
         return set_speed(speed=MainApplication.speeds[self.current_speed])
 
-    def shitty_PID(self, target : float = 65, min_speed : int = 2, max_speed : int = 6, allow_full_speed : bool = False) -> str:
+    def shitty_PID(self, target : float = 65, min_speed : int = 2, max_speed : int = 7) -> str:
         kP = 0.8
         kD = 0
         kI = 0.05
@@ -171,7 +172,7 @@ class MainApplication(tk.Frame):
         self.PIDSignal = kP * error + kD * error_deriv + kI * self.error_acc
         self.PIDSignal = max(self.PIDSignal, float(min_speed))
 
-        output_signal = change_speed(0, self.PIDSignal, min_speed, max_speed)
+        output_signal = change_speed(0, self.PIDSignal, min_speed, max_speed, self.allow_full_speed)
         self.current_speed = output_signal
 
         print(f'PIDSignal: {self.PIDSignal:.2f}, PK: {kP * error:.2f}, PI: {kI * self.error_acc:.2f}, error: {error:.2f}, error_deriv {error_deriv:.2f}, error_acc: {self.error_acc:.2f}')
