@@ -217,7 +217,7 @@ if __name__ == "__main__":
         root.mainloop()
     except Exception:
         print('An error occurred and the application will forcefully exit!')
-        on_closing()
         print(traceback.format_exc())
     finally:
+        on_closing()
         print(f'Exiting {__file__}')
